@@ -1,0 +1,33 @@
+# Experiment data and outputs
+/data/
+/logs/
+/results/
+/checkpoints/
+/wandb/
+
+# Model/runtime artifacts
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.npy
+*.npz
+*.pkl
+*.pickle
+*.bin
+*.safetensors
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

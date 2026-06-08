@@ -1,0 +1,1 @@
+The Influenza-like Illness dataset contains weekly observations of influenza-like illness activity, including weighted and unweighted ILI rates, age-group counts, total ILI cases, provider counts, and a target variable. It is commonly used for multivariate long-term time series forecasting with chronological train, validation, and test splits.

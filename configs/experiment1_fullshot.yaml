@@ -1,0 +1,214 @@
+datasets:
+  ETTh1:
+    root: data/ETT-small
+    file: ETTh1.csv
+    data: ETTh1
+    timellm_data: ETTh1
+    t3: ETTh1
+    n_vars: 7
+    freq: h
+    period: 24
+    horizons: [96, 192, 336, 720]
+  ETTh2:
+    root: data/ETT-small
+    file: ETTh2.csv
+    data: ETTh2
+    timellm_data: ETTh2
+    t3: ETTh2
+    n_vars: 7
+    freq: h
+    period: 24
+    horizons: [96, 192, 336, 720]
+  ETTm1:
+    root: data/ETT-small
+    file: ETTm1.csv
+    data: ETTm1
+    timellm_data: ETTm1
+    t3: ETTm1
+    n_vars: 7
+    freq: t
+    period: 96
+    horizons: [96, 192, 336, 720]
+  ETTm2:
+    root: data/ETT-small
+    file: ETTm2.csv
+    data: ETTm2
+    timellm_data: ETTm2
+    t3: ETTm2
+    n_vars: 7
+    freq: t
+    period: 96
+    horizons: [96, 192, 336, 720]
+  Weather:
+    root: data/weather
+    file: weather.csv
+    data: custom
+    timellm_data: Weather
+    t3: Weather
+    n_vars: 21
+    freq: h
+    period: 144
+    horizons: [96, 192, 336, 720]
+  ECL:
+    root: data/electricity
+    file: electricity.csv
+    data: custom
+    timellm_data: ECL
+    t3: ECL
+    n_vars: 321
+    freq: h
+    period: 24
+    horizons: [96, 192, 336, 720]
+  Traffic:
+    root: data/traffic
+    file: traffic.csv
+    data: custom
+    timellm_data: Traffic
+    t3: Traffic
+    n_vars: 862
+    freq: h
+    period: 24
+    horizons: [96, 192, 336, 720]
+  ILI:
+    root: data/illness
+    file: national_illness.csv
+    data: custom
+    timellm_data: ILI
+    t3: ILI
+    n_vars: 7
+    freq: w
+    period: 52
+    horizons: [24, 36, 48, 60]
+  Exchange:
+    root: data/exchange_rate
+    file: exchange_rate.csv
+    data: custom
+    timellm_data: Exchange
+    t3: Exchange
+    n_vars: 8
+    freq: d
+    period: 7
+    horizons: [96, 192, 336, 720]
+
+seq_len: 336
+label_len: 48
+epochs: 15
+patience: 5
+seeds: [2024, 2025, 2026]
+
+models:
+  PatchTST:
+    default_batch_size: 128
+    dataset_batch_size:
+      ECL: 32
+      Traffic: 24
+      ILI: 16
+      Exchange: 32
+    learning_rate: 0.0001
+    dataset_learning_rate:
+      ILI: 0.0025
+      Exchange: 0.0005
+    lradj: TST
+    dataset_lradj:
+      ILI: constant
+    patch_len: 16
+    stride: 8
+    dataset_patch_len:
+      ILI: 24
+    dataset_stride:
+      ILI: 2
+
+  DMMV:
+    variant: DMMV_A
+    default_batch_size: 64
+    dataset_batch_size:
+      Weather: 8
+      ECL: 8
+      Traffic: 8
+    optimizer: AdamW
+    learning_rate: 0.01
+    individual: 1
+    norm_const: 0.4
+    align_const: 0.4
+    vm_arch: mae_base
+    ft_type: none
+    trained_MAE_ckpt: checkpoints/mae_visualize_vit_base.pth
+
+  TimeLLM:
+    default_batch_size: 24
+    learning_rate: 0.01
+    d_model: 32
+    d_ff: 128
+    llm_model: LLAMA
+    llm_dim: 4096
+    llm_layers: 32
+    accelerate_processes: 2
+    mixed_precision: bf16
+    dataset_d_model:
+      Weather: 32
+      ECL: 16
+      Traffic: 16
+      ILI: 16
+      Exchange: 16
+    dataset_d_ff:
+      Weather: 32
+      ECL: 32
+      Traffic: 32
+      ILI: 32
+      Exchange: 32
+    adapted_datasets:
+      - ILI
+      - Exchange
+
+  T3Time:
+    default_batch_size: 16
+    default_embedding_batch_size: 1
+    default_channel: 64
+    default_learning_rate: 0.0001
+    default_dropout_n: 0.3
+    default_e_layer: 1
+    default_d_layer: 2
+    dataset_num_workers:
+      Traffic: 4
+      ECL: 4
+    official_like_by_dataset_horizon:
+      ETTh1:
+        "96": {batch_size: 256, channel: 256, learning_rate: 0.0001, dropout_n: 0.4, e_layer: 1, d_layer: 1}
+        "192": {batch_size: 32, channel: 256, learning_rate: 0.0001, dropout_n: 0.6, e_layer: 1, d_layer: 2}
+        "336": {batch_size: 16, channel: 64, learning_rate: 0.0001, dropout_n: 0.7, e_layer: 1, d_layer: 2}
+        "720": {batch_size: 32, channel: 64, learning_rate: 0.0001, dropout_n: 0.5, e_layer: 3, d_layer: 4}
+      ETTh2:
+        "96": {batch_size: 256, channel: 64, learning_rate: 0.0001, dropout_n: 0.25, e_layer: 1, d_layer: 1}
+        "192": {batch_size: 256, channel: 128, learning_rate: 0.0001, dropout_n: 0.25, e_layer: 3, d_layer: 5}
+        "336": {batch_size: 256, channel: 128, learning_rate: 0.0001, dropout_n: 0.4, e_layer: 3, d_layer: 5}
+        "720": {batch_size: 256, channel: 128, learning_rate: 0.0001, dropout_n: 0.4, e_layer: 3, d_layer: 5}
+      ETTm1:
+        "96": {batch_size: 64, channel: 128, learning_rate: 0.0001, dropout_n: 0.5, e_layer: 1, d_layer: 2}
+        "192": {batch_size: 32, channel: 64, learning_rate: 0.0001, dropout_n: 0.65, e_layer: 1, d_layer: 2}
+        "336": {batch_size: 32, channel: 64, learning_rate: 0.0001, dropout_n: 0.65, e_layer: 1, d_layer: 2}
+        "720": {batch_size: 16, channel: 64, learning_rate: 0.0001, dropout_n: 0.7, e_layer: 2, d_layer: 2}
+      ETTm2:
+        "96": {batch_size: 16, channel: 64, learning_rate: 0.0001, dropout_n: 0.6, e_layer: 1, d_layer: 1}
+        "192": {batch_size: 16, channel: 64, learning_rate: 0.0001, dropout_n: 0.5, e_layer: 1, d_layer: 1}
+        "336": {batch_size: 16, channel: 64, learning_rate: 0.0001, dropout_n: 0.7, e_layer: 1, d_layer: 1}
+        "720": {batch_size: 16, channel: 16, learning_rate: 0.0001, dropout_n: 0.55, e_layer: 1, d_layer: 1}
+      Weather:
+        "96": {batch_size: 32, channel: 64, learning_rate: 0.001, dropout_n: 0.1, e_layer: 6, d_layer: 2}
+        "192": {batch_size: 32, channel: 32, learning_rate: 0.0001, dropout_n: 0.1, e_layer: 1, d_layer: 2}
+        "336": {batch_size: 32, channel: 64, learning_rate: 0.0001, dropout_n: 0.5, e_layer: 1, d_layer: 6}
+        "720": {batch_size: 64, channel: 128, learning_rate: 0.0001, dropout_n: 0.25, e_layer: 1, d_layer: 1}
+      ECL:
+        "96": {batch_size: 8, channel: 128, learning_rate: 0.001, dropout_n: 0.3, e_layer: 3, d_layer: 6}
+        "192": {batch_size: 8, channel: 128, learning_rate: 0.001, dropout_n: 0.3, e_layer: 3, d_layer: 6}
+        "336": {batch_size: 8, channel: 128, learning_rate: 0.001, dropout_n: 0.1, e_layer: 3, d_layer: 6}
+        "720": {batch_size: 8, channel: 128, learning_rate: 0.001, dropout_n: 0.1, e_layer: 3, d_layer: 6}
+      ILI:
+        "24": {batch_size: 16, channel: 32, learning_rate: 0.0001, dropout_n: 0.1, e_layer: 1, d_layer: 1}
+        "36": {batch_size: 16, channel: 64, learning_rate: 0.0001, dropout_n: 0.1, e_layer: 1, d_layer: 1}
+        "48": {batch_size: 32, channel: 128, learning_rate: 0.0025, dropout_n: 0.5, e_layer: 1, d_layer: 1}
+        "60": {batch_size: 32, channel: 64, learning_rate: 0.0001, dropout_n: 0.1, e_layer: 1, d_layer: 1}
+      Exchange:
+        "96": {batch_size: 128, channel: 16, learning_rate: 0.0001, dropout_n: 0.5, e_layer: 1, d_layer: 2}
+        "192": {batch_size: 128, channel: 16, learning_rate: 0.0001, dropout_n: 0.5, e_layer: 1, d_layer: 2}
+        "336": {batch_size: 128, channel: 8, learning_rate: 0.0001, dropout_n: 0.3, e_layer: 1, d_layer: 1}
+        "720": {batch_size: 40, channel: 8, learning_rate: 0.0001, dropout_n: 0.01, e_layer: 1, d_layer: 1}
