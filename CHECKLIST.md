@@ -8,6 +8,7 @@
 - [x] Add data/checkpoint preparation scripts.
 - [x] Add official-command runner.
 - [x] Add result summarizer.
+- [x] Add GPU memory probe mode and summarizer.
 - [ ] Run server-side smoke tests on 2x3090.
 - [ ] Run full experiment grid.
 - [ ] Generate final summaries.

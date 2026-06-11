@@ -124,6 +124,49 @@ python scripts/run_four_baselines.py \
   --fail-fast
 ```
 
+## Memory Probe
+
+Use this when the goal is to record whether the four problematic models have abnormal GPU memory behavior. It short-runs the official commands, samples `nvidia-smi`, writes raw traces, and records OOM/peak memory in `results/memory_probe.csv`.
+This is the recommended first step for diagnosing the four excluded/problematic baselines; it is not intended to produce final forecasting scores.
+
+```bash
+python scripts/run_four_baselines.py \
+  --execute \
+  --memory-probe \
+  --models PatchTST,DMMV,TimeLLM,T3Time \
+  --datasets Traffic \
+  --horizons 96 \
+  --seeds 2024 \
+  --gpu 0 \
+  --timellm-llm-model GPT2 \
+  --timellm-llm-layers 6 \
+  --timellm-processes 1 \
+  --timellm-mixed-precision no \
+  --fail-fast
+```
+
+Useful probe controls:
+
+- `--probe-epochs 1`: number of epochs for memory probing.
+- `--probe-max-train-batches 2`: T3Time-only train batch cap during probe.
+- `--probe-max-eval-batches 1`: T3Time-only eval/test batch cap during probe.
+- `--probe-t3-max-embed-samples 8`: T3Time embedding samples during probe.
+- `--gpu-sample-interval-ms 500`: `nvidia-smi` sampling interval.
+- `--memory-anomaly-threshold 0.90`: mark memory anomaly if peak memory reaches 90% of visible GPU memory.
+
+Summarize memory probe results:
+
+```bash
+python scripts/summarize_memory_probe.py
+```
+
+Outputs:
+
+- `results/memory_probe.csv`
+- `results/gpu_traces/*.csv`
+- `results/summary/memory_probe_case_summary.csv`
+- `results/summary/memory_probe_model_summary.csv`
+
 ## Full Run
 
 ```bash

@@ -35,6 +35,8 @@ def parse_args():
     parser.add_argument("--epochs", type=int, default=150, help="")
     parser.add_argument('--seed', type=int, default=2024, help='random seed')
     parser.add_argument("--es_patience", type=int, default=25, help="quit if no improvement after this many iterations")    
+    parser.add_argument("--max_train_batches", type=int, default=0, help="profile-only limit for train batches; 0 means full epoch")
+    parser.add_argument("--max_eval_batches", type=int, default=0, help="profile-only limit for eval/test batches; 0 means full split")
     parser.add_argument("--save", type=str, default="./logs/" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + "-", help="save path")
     return parser.parse_args()
 
@@ -168,6 +170,8 @@ def main():
         train_mae = []
         
         for iter, (x,y,x_mark,y_mark, embeddings) in enumerate(train_loader):
+            if args.max_train_batches and iter >= args.max_train_batches:
+                break
             trainx = torch.Tensor(x).to(device) # [B, L, N]
             trainy = torch.Tensor(y).to(device)
             trainx_mark = torch.Tensor(x_mark).to(device) 
@@ -187,6 +191,8 @@ def main():
         s1 = time.time()
 
         for iter, (x,y,x_mark,y_mark, embeddings) in enumerate(val_loader):
+            if args.max_eval_batches and iter >= args.max_eval_batches:
+                break
             valx = torch.Tensor(x).to(device)
             valy = torch.Tensor(y).to(device)
             valx_mark = torch.Tensor(x_mark).to(device)
@@ -234,6 +240,8 @@ def main():
                 test_y = []
 
                 for iter, (x,y,x_mark,y_mark, embeddings) in enumerate(test_loader):
+                    if args.max_eval_batches and iter >= args.max_eval_batches:
+                        break
                     testx = torch.Tensor(x).to(device)
                     testy = torch.Tensor(y).to(device)
                     testx_mark = torch.Tensor(x_mark).to(device)
@@ -302,6 +310,8 @@ def main():
     test_y = []
 
     for iter, (x,y,x_mark,y_mark, embeddings) in enumerate(test_loader):
+        if args.max_eval_batches and iter >= args.max_eval_batches:
+            break
         testx = torch.Tensor(x).to(device)
         testy = torch.Tensor(y).to(device)
         testx_mark = torch.Tensor(x_mark).to(device)

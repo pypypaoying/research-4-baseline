@@ -29,6 +29,8 @@ Use vendored official repositories with minimal compatibility patches:
 - `results/runs.csv`: one row per successful run.
 - `logs/*.log`: raw official stdout/stderr for each run.
 - `results/summary/*.csv`: seed-averaged case table, dataset averages, horizon averages, overall ranks, and first counts.
+- `results/memory_probe.csv`: short-run memory probe records with OOM and peak GPU memory.
+- `results/gpu_traces/*.csv`: raw `nvidia-smi` traces for memory probe runs.
 
 ## Risks
 
