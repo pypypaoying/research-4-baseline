@@ -141,8 +141,23 @@ python scripts/run_four_baselines.py \
   --timellm-llm-model GPT2 \
   --timellm-llm-layers 6 \
   --timellm-processes 1 \
-  --timellm-mixed-precision no \
-  --fail-fast
+  --timellm-mixed-precision no
+```
+
+Do not use `--fail-fast` for the first memory sweep. If one model OOMs, that is a valid probe result and the runner should continue to the remaining models.
+
+If a model OOMs under the official-like batch size, keep that row as the primary memory finding. Then run a second, clearly marked rescue probe with a smaller batch size to check whether the issue is batch-size driven:
+
+```bash
+python scripts/run_four_baselines.py \
+  --execute \
+  --memory-probe \
+  --models PatchTST \
+  --datasets Traffic \
+  --horizons 96 \
+  --seeds 2024 \
+  --gpu 0 \
+  --batch-size 8
 ```
 
 Useful probe controls:

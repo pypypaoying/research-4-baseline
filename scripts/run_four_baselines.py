@@ -681,7 +681,7 @@ def detect_oom(text: str, returncode: int) -> bool:
         "memoryerror",
     ]
     lower = text.lower()
-    return returncode != 0 and any(p in lower for p in patterns)
+    return any(p in lower for p in patterns)
 
 
 def run_command(
