@@ -95,7 +95,10 @@ T3Time uses GPT-2 for prompt embeddings. To force an offline/local cache:
 --t3-gpt2-model-path /path/to/gpt2 --t3-gpt2-local-only
 ```
 
-For Traffic, T3Time's prompt embedding stage is the main bottleneck: every time-series window has 862 variables, and the official preprocessing embeds one prompt per variable. This package keeps the same prompts and GPT-2 last-token embeddings, but batches prompt inference through `--t3-prompt-batch-size`.
+For Traffic, T3Time's prompt embedding stage is the main bottleneck: every time-series window has 862 variables, and the official preprocessing embeds one prompt per variable. This package keeps the same prompts, GPT-2 model, FP32 inference, and last-token embedding contract, but removes avoidable engineering overhead in two ways:
+
+- `--t3-prompt-batch-size` batches prompt inference without changing the generated prompts.
+- T3Time embeddings are cached by input length, for example `data/t3time_embeddings/Traffic/seq336/train/`, because the prompt embedding depends on the input window and timestamp, not on `pred_len`. The same cache is reused across horizons and seeds; if a shorter horizon needs more tail windows, `store_emb.py` only fills the missing files.
 
 To diagnose only this preprocessing stage on a 3090 before running full training:
 
@@ -113,6 +116,22 @@ python scripts/run_four_baselines.py \
 ```
 
 This writes limited probe embeddings under `data/t3time_embeddings_probe/` and memory traces under `results/gpu_traces/`. It does not populate the full-run cache, so a later A800 full run will still generate the complete embeddings under `data/t3time_embeddings/`.
+
+For full T3Time runs, generate the shortest-horizon cache first to cover the largest number of input windows, then later horizons and seeds will reuse it:
+
+```bash
+python scripts/run_four_baselines.py \
+  --execute \
+  --models T3Time \
+  --datasets Traffic \
+  --horizons 96 \
+  --seeds 2024 \
+  --gpu 0 \
+  --t3-embed-batch-size 4 \
+  --t3-prompt-batch-size 128
+```
+
+After that, running `--horizons 192,336,720` or more seeds should only do a fast cache check for embeddings unless files are missing.
 
 ## Dry Run
 

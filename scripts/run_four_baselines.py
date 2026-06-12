@@ -60,8 +60,8 @@ def t3_embedding_root(args: argparse.Namespace) -> Path:
     return REPO_ROOT / "data" / "t3time_embeddings"
 
 
-def t3_embedding_split_dir(embed_root: Path, dataset: str, seq_len: int, horizon: int, divide: str) -> Path:
-    return embed_root / dataset / f"seq{seq_len}_pred{horizon}" / divide
+def t3_embedding_split_dir(embed_root: Path, dataset: str, seq_len: int, divide: str) -> Path:
+    return embed_root / dataset / f"seq{seq_len}" / divide
 
 
 def read_json(path: Path) -> dict | None:
@@ -79,13 +79,13 @@ def read_json(path: Path) -> dict | None:
 def t3_embedding_cache_ready(split_dir: Path, max_samples: int, force: bool) -> bool:
     if force:
         return False
+    if not max_samples:
+        return False
     meta = read_json(split_dir / "_meta.json")
     if not meta:
         return False
-    written = int(meta.get("written_samples", 0) or 0)
-    if max_samples:
-        return written >= max_samples
-    return bool(meta.get("complete", False))
+    written = int(meta.get("cached_prefix_samples", meta.get("written_samples", 0)) or 0)
+    return written >= max_samples
 
 
 def mkdirs() -> None:
@@ -541,7 +541,6 @@ def t3_embedding_commands(
             embed_root,
             ds["t3"],
             int(config["seq_len"]),
-            spec.horizon,
             divide,
         )
         if t3_embedding_cache_ready(split_dir, max_samples, args.force_t3_embeddings):
@@ -576,6 +575,8 @@ def t3_embedding_commands(
         ]
         if max_samples:
             cmd += ["--max_samples", str(max_samples)]
+        if args.force_t3_embeddings:
+            cmd += ["--force"]
         out.append((cmd, cwd, log_path, extra_env))
     return out
 

@@ -19,9 +19,9 @@ This package vendors official repositories and applies only minimal experiment-c
 | Time-LLM | `run_main.py` | Move random seed setup after argument parsing so `--seed` works for `{2024,2025,2026}`. |
 | Time-LLM | `data_provider/data_factory.py` | Add `ILI` and `Exchange` as `Dataset_Custom` keys for the unified nine-dataset protocol. |
 | Time-LLM | `dataset/prompt_bank/ILI.txt`, `Exchange.txt` | Add conservative dataset descriptions required by Time-LLM prompt loading. |
-| T3Time | `storage/store_emb.py` | Add repo-root import path, configurable data/model paths, embedding batch controls, and `--max_samples` for smoke tests. |
+| T3Time | `storage/store_emb.py` | Add repo-root import path, configurable data/model paths, embedding batch controls, and `--max_samples` for smoke tests. Cache embeddings by input length so horizons and seeds can reuse identical prompt embeddings. |
 | T3Time | `data_provider/data_loader_save.py` | Replace hardcoded dataset root with `T3TIME_DATA_ROOT`; keep official split logic. |
-| T3Time | `data_provider/data_loader_emb.py` | Replace hardcoded embedding root with `T3TIME_EMBED_ROOT`; cache embeddings by input and prediction length. |
+| T3Time | `data_provider/data_loader_emb.py` | Replace hardcoded embedding root with `T3TIME_EMBED_ROOT`; read shared input-length embedding caches with fallback to the older input/prediction-length layout. |
 | T3Time | `storage/gen_prompt_emb.py` | Allow local GPT-2 path through `T3TIME_GPT2_MODEL_PATH`; add Traffic and Exchange prompt templates; batch GPT-2 prompt inference while preserving the same last-token embedding contract. |
 | T3Time | `storage/store_emb.py` | Save one embedding file per sample even when preprocessing batch size is greater than 1; write `_meta.json` so partial probe caches are distinguishable from full caches. |
 | Runner | `scripts/run_four_baselines.py` | Add T3Time embedding-only memory probes, prompt batch-size control, metadata-based embedding cache checks, and a separate `data/t3time_embeddings_probe/` cache for limited probes. |

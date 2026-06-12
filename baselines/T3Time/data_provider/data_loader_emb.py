@@ -9,6 +9,27 @@ import warnings
 import h5py
 warnings.filterwarnings('ignore')
 
+
+def _embedding_paths(data_path_file, seq_len, pred_len, flag):
+    embed_root = os.environ.get("T3TIME_EMBED_ROOT", "./Embeddings")
+    shared_path = os.path.join(embed_root, data_path_file, f"seq{seq_len}", flag)
+    legacy_path = os.path.join(embed_root, data_path_file, f"seq{seq_len}_pred{pred_len}", flag)
+    return shared_path, legacy_path
+
+
+def _load_embedding(embed_path, legacy_embed_path, index):
+    checked_paths = []
+    for base_path in [embed_path, legacy_embed_path]:
+        file_path = os.path.join(base_path, f"{index}.h5")
+        checked_paths.append(file_path)
+        if os.path.exists(file_path):
+            with h5py.File(file_path, 'r') as hf:
+                data = hf['embeddings'][:]
+                tensor = torch.from_numpy(data)
+            return torch.stack([tensor.squeeze(0)], dim=-1)
+    raise FileNotFoundError(f"No embedding file found for index {index}. Checked: {checked_paths}")
+
+
 class Dataset_ETT_hour(Dataset):
     def __init__(self, root_path=os.environ.get("T3TIME_DATA_ROOT", "./dataset"), flag='train', size=None, 
                  features='M', data_path='ETTh1', num_nodes=7,
@@ -47,11 +68,8 @@ class Dataset_ETT_hour(Dataset):
         self.data_path_file = data_path_file
 
         self.model_name = model_name
-        self.embed_path = os.path.join(
-            os.environ.get("T3TIME_EMBED_ROOT", "./Embeddings"),
-            data_path_file,
-            f"seq{self.seq_len}_pred{self.pred_len}",
-            flag,
+        self.embed_path, self.legacy_embed_path = _embedding_paths(
+            data_path_file, self.seq_len, self.pred_len, flag
         )
 
         self.__read_data__()
@@ -109,18 +127,7 @@ class Dataset_ETT_hour(Dataset):
         seq_x_mark = self.data_stamp[s_begin:s_end]
         seq_y_mark = self.data_stamp[r_begin:r_end]
 
-        embeddings_stack = []
-        file_path = os.path.join(self.embed_path, f"{index}.h5")
-        
-        if os.path.exists(file_path):
-            with h5py.File(file_path, 'r') as hf:
-                data = hf['embeddings'][:]
-                tensor = torch.from_numpy(data)
-                embeddings_stack.append(tensor.squeeze(0))
-        else:
-            raise FileNotFoundError(f"No embedding file found at {file_path}")       
-        
-        embeddings = torch.stack(embeddings_stack, dim=-1)
+        embeddings = _load_embedding(self.embed_path, self.legacy_embed_path, index)
 
         return seq_x, seq_y, seq_x_mark, seq_y_mark, embeddings
         # return seq_x, seq_y, seq_x_mark, seq_y_mark
@@ -167,11 +174,8 @@ class Dataset_ETT_minute(Dataset):
         self.data_path_file = data_path_file
 
         self.model_name = model_name
-        self.embed_path = os.path.join(
-            os.environ.get("T3TIME_EMBED_ROOT", "./Embeddings"),
-            data_path_file,
-            f"seq{self.seq_len}_pred{self.pred_len}",
-            flag,
+        self.embed_path, self.legacy_embed_path = _embedding_paths(
+            data_path_file, self.seq_len, self.pred_len, flag
         )
 
         self.__read_data__()
@@ -228,18 +232,7 @@ class Dataset_ETT_minute(Dataset):
         seq_x_mark = self.data_stamp[s_begin:s_end]
         seq_y_mark = self.data_stamp[r_begin:r_end]
 
-        embeddings_stack = []
-        file_path = os.path.join(self.embed_path, f"{index}.h5")
-        
-        if os.path.exists(file_path):
-            with h5py.File(file_path, 'r') as hf:
-                data = hf['embeddings'][:]
-                tensor = torch.from_numpy(data)
-                embeddings_stack.append(tensor.squeeze(0))
-        else:
-            raise FileNotFoundError(f"No embedding file found at {file_path}")       
-        
-        embeddings = torch.stack(embeddings_stack, dim=-1)
+        embeddings = _load_embedding(self.embed_path, self.legacy_embed_path, index)
 
         return seq_x, seq_y, seq_x_mark, seq_y_mark, embeddings
     
@@ -287,11 +280,8 @@ class Dataset_Custom(Dataset):
         self.data_path_file = data_path_file
 
         self.model_name = model_name
-        self.embed_path = os.path.join(
-            os.environ.get("T3TIME_EMBED_ROOT", "./Embeddings"),
-            data_path_file,
-            f"seq{self.seq_len}_pred{self.pred_len}",
-            flag,
+        self.embed_path, self.legacy_embed_path = _embedding_paths(
+            data_path_file, self.seq_len, self.pred_len, flag
         )
 
         self.__read_data__()
@@ -363,19 +353,7 @@ class Dataset_Custom(Dataset):
 
         # auto_y = self.data_x[s_begin+self.patch_len:s_end+self.patch_len]
 
-        embeddings_stack = []
-        # for n in range(self.num_nodes):
-        # print("embed_path in __getitem__:", self.embed_path)
-        file_path = os.path.join(self.embed_path, f"{index}.h5")
-        if os.path.exists(file_path):
-            with h5py.File(file_path, 'r') as hf:
-                data = hf['embeddings'][:]
-                tensor = torch.from_numpy(data)
-                embeddings_stack.append(tensor.squeeze(0))
-        else:
-            raise FileNotFoundError(f"No embedding file found at {file_path}")
-                
-        embeddings = torch.stack(embeddings_stack, dim=-1)
+        embeddings = _load_embedding(self.embed_path, self.legacy_embed_path, index)
         # print("Shape of embeddings: " ,embeddings.shape)
         return seq_x, seq_y, seq_x_mark, seq_y_mark, embeddings
 
