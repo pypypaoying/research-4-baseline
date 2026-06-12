@@ -353,10 +353,14 @@ class Exp:
         print("mse:{}, mae:{}, rse:{}".format(mse, mae, rse))
         self.writer.add_text("Test_Metrics", f"mse:{mse}, mae:{mae}, rse:{rse}")
 
+        corr_array = np.asarray(corr)
+        corr_scalar = float(np.nanmean(corr_array))
         np.save(
             folder_path + "metrics.npy",
-            np.array([mae, mse, rmse, mape, mspe, rse, corr]),
+            np.array([mae, mse, rmse, mape, mspe, rse, corr_scalar], dtype=np.float64),
         )
+        if corr_array.ndim > 0:
+            np.save(folder_path + "corr.npy", corr_array)
         np.save(folder_path + "pred.npy", preds)
         np.save(folder_path + "true.npy", trues)
         np.save(folder_path + "x.npy", inputx)
