@@ -13,7 +13,8 @@ class GenPromptEmb(nn.Module):
         input_len = 96,
         d_model = 768,
         layer = 12,
-        divide = 'train'
+        divide = 'train',
+        prompt_batch_size = 32
     ):  
         super(GenPromptEmb, self).__init__()
         self.data_path = data_path
@@ -23,13 +24,17 @@ class GenPromptEmb(nn.Module):
         self.d_model = d_model
         self.layer = layer
         self.len = self.input_len-1
+        self.prompt_batch_size = max(1, int(os.environ.get("T3TIME_PROMPT_BATCH_SIZE", prompt_batch_size)))
         
         model_name = os.environ.get("T3TIME_GPT2_MODEL_PATH", model_name)
         local_only = os.path.isdir(model_name) or os.environ.get("T3TIME_GPT2_LOCAL_ONLY") == "1"
         self.tokenizer = GPT2Tokenizer.from_pretrained(model_name, local_files_only=local_only)
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
         self.model = GPT2Model.from_pretrained(model_name, local_files_only=local_only).to(self.device)
+        self.model.eval()
 
-    def _prepare_prompt(self, input_template, in_data, in_data_mark, i, j):
+    def _prepare_prompt_text(self, input_template, in_data, in_data_mark, i, j):
         # Time series value
         values = in_data[i, :, j].flatten().tolist()
         values_str = ", ".join([str(int(value)) for value in values])
@@ -53,8 +58,10 @@ class GenPromptEmb(nn.Module):
         in_prompt = input_template.replace("value1, ..., valuen", values_str)
         in_prompt = in_prompt.replace("Trends", trends_str)
         in_prompt = in_prompt.replace("[t1]", start_date).replace("[t2]", end_date)
-        # print("in_prompt: ", in_prompt)
+        return in_prompt
 
+    def _prepare_prompt(self, input_template, in_data, in_data_mark, i, j):
+        in_prompt = self._prepare_prompt_text(input_template, in_data, in_data_mark, i, j)
         tokenized_prompt = self.tokenizer.encode(in_prompt, return_tensors="pt").to(self.device)
         return tokenized_prompt
 
@@ -79,28 +86,35 @@ class GenPromptEmb(nn.Module):
 
             input_template = input_templates.get(self.data_path, input_templates['FRED'])
             
-            tokenized_prompts = []
-            max_token_count = 0
+            prompts = []
+            prompt_index = []
             for i in range(len(in_data)):
                 for j in range(in_data.shape[2]):
-                    tokenized_prompt = self._prepare_prompt(input_template, in_data, in_data_mark, i, j).to(self.device)
-                    max_token_count = max(max_token_count, tokenized_prompt.shape[1])
-                    tokenized_prompts.append((i, tokenized_prompt.to(self.device), j))
+                    prompts.append(self._prepare_prompt_text(input_template, in_data, in_data_mark, i, j))
+                    prompt_index.append((i, j))
 
-            in_prompt_emb = torch.zeros((len(in_data), max_token_count, self.d_model, in_data.shape[2]), dtype=torch.float32, device=self.device)
+            last_token_emb = torch.empty(
+                (len(in_data), self.d_model, in_data.shape[2]),
+                dtype=torch.float32,
+                device=self.device,
+            )
 
-            for i, tokenized_prompt, j in tokenized_prompts:
-                prompt_embeddings = self.forward(tokenized_prompt)
-                padding_length = max_token_count - tokenized_prompt.shape[1]
-                if padding_length > 0:
-                    last_token_embedding = prompt_embeddings[:, -1, :].unsqueeze(1)
-                    padding = last_token_embedding.repeat(1, padding_length, 1)
-                    prompt_embeddings_padded = torch.cat([prompt_embeddings, padding], dim=1)
-                else:
-                    prompt_embeddings_padded = prompt_embeddings
-                        
-                in_prompt_emb[i, :max_token_count, :, j] = prompt_embeddings_padded
-                last_token_emb = in_prompt_emb[:, max_token_count-1:max_token_count, :, :]
-                last_token_emb = last_token_emb.squeeze()
+            for start in range(0, len(prompts), self.prompt_batch_size):
+                end = min(start + self.prompt_batch_size, len(prompts))
+                batch = self.tokenizer(
+                    prompts[start:end],
+                    padding=True,
+                    return_tensors="pt",
+                ).to(self.device)
+                with torch.no_grad():
+                    prompt_embeddings = self.model(
+                        input_ids=batch["input_ids"],
+                        attention_mask=batch["attention_mask"],
+                    ).last_hidden_state
+                last_positions = batch["attention_mask"].sum(dim=1) - 1
+                rows = torch.arange(prompt_embeddings.size(0), device=self.device)
+                batch_last_token_emb = prompt_embeddings[rows, last_positions, :]
+                for row, (i, j) in enumerate(prompt_index[start:end]):
+                    last_token_emb[i, :, j] = batch_last_token_emb[row]
 
             return last_token_emb

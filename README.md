@@ -95,6 +95,25 @@ T3Time uses GPT-2 for prompt embeddings. To force an offline/local cache:
 --t3-gpt2-model-path /path/to/gpt2 --t3-gpt2-local-only
 ```
 
+For Traffic, T3Time's prompt embedding stage is the main bottleneck: every time-series window has 862 variables, and the official preprocessing embeds one prompt per variable. This package keeps the same prompts and GPT-2 last-token embeddings, but batches prompt inference through `--t3-prompt-batch-size`.
+
+To diagnose only this preprocessing stage on a 3090 before running full training:
+
+```bash
+python scripts/run_four_baselines.py \
+  --execute \
+  --memory-probe \
+  --t3-embedding-only \
+  --datasets Traffic \
+  --horizons 96 \
+  --seeds 2024 \
+  --gpu 0 \
+  --t3-max-embed-samples 8 \
+  --t3-prompt-batch-size 32
+```
+
+This writes limited probe embeddings under `data/t3time_embeddings_probe/` and memory traces under `results/gpu_traces/`. It does not populate the full-run cache, so a later A800 full run will still generate the complete embeddings under `data/t3time_embeddings/`.
+
 ## Dry Run
 
 ```bash
@@ -166,8 +185,24 @@ Useful probe controls:
 - `--probe-max-train-batches 2`: T3Time-only train batch cap during probe.
 - `--probe-max-eval-batches 1`: T3Time-only eval/test batch cap during probe.
 - `--probe-t3-max-embed-samples 8`: T3Time embedding samples during probe.
+- `--t3-embedding-only`: run only T3Time embedding generation and skip `train.py`.
+- `--t3-prompt-batch-size 32`: batch GPT-2 prompt inference during T3Time embedding generation.
 - `--gpu-sample-interval-ms 500`: `nvidia-smi` sampling interval.
 - `--memory-anomaly-threshold 0.90`: mark memory anomaly if peak memory reaches 90% of visible GPU memory.
+
+To test the exact T3Time training memory at batch size 16 after a small embedding probe cache has been created:
+
+```bash
+python scripts/run_four_baselines.py \
+  --execute \
+  --memory-probe \
+  --models T3Time \
+  --datasets Traffic \
+  --horizons 96 \
+  --seeds 2024 \
+  --gpu 0 \
+  --batch-size 16
+```
 
 Summarize memory probe results:
 

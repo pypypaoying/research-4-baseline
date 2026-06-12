@@ -50,8 +50,54 @@ def str_path(path: Path) -> str:
     return str(path.resolve())
 
 
+def t3_use_probe_embedding_cache(args: argparse.Namespace) -> bool:
+    return bool(args.memory_probe or (args.t3_embedding_only and args.t3_max_embed_samples))
+
+
+def t3_embedding_root(args: argparse.Namespace) -> Path:
+    if t3_use_probe_embedding_cache(args):
+        return REPO_ROOT / "data" / "t3time_embeddings_probe"
+    return REPO_ROOT / "data" / "t3time_embeddings"
+
+
+def t3_embedding_split_dir(embed_root: Path, dataset: str, seq_len: int, horizon: int, divide: str) -> Path:
+    return embed_root / dataset / f"seq{seq_len}_pred{horizon}" / divide
+
+
+def read_json(path: Path) -> dict | None:
+    if not path.exists():
+        return None
+    try:
+        import json
+
+        with path.open("r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def t3_embedding_cache_ready(split_dir: Path, max_samples: int, force: bool) -> bool:
+    if force:
+        return False
+    meta = read_json(split_dir / "_meta.json")
+    if not meta:
+        return False
+    written = int(meta.get("written_samples", 0) or 0)
+    if max_samples:
+        return written >= max_samples
+    return bool(meta.get("complete", False))
+
+
 def mkdirs() -> None:
-    for rel in ["logs", "results", "checkpoints", "data/t3time_dataset", "results/gpu_traces"]:
+    for rel in [
+        "logs",
+        "results",
+        "checkpoints",
+        "data/t3time_dataset",
+        "data/t3time_embeddings",
+        "data/t3time_embeddings_probe",
+        "results/gpu_traces",
+    ]:
         (REPO_ROOT / rel).mkdir(parents=True, exist_ok=True)
 
 
@@ -181,10 +227,20 @@ def t3_hparams(config: dict, dataset: str, horizon: int, overrides: argparse.Nam
     hp.setdefault("num_workers", mcfg.get("dataset_num_workers", {}).get(dataset, 10))
     if overrides.batch_size:
         hp["batch_size"] = overrides.batch_size
-    if overrides.memory_probe:
+    elif overrides.memory_probe:
         needed = max(1, overrides.probe_max_train_batches, overrides.probe_max_eval_batches)
         hp["batch_size"] = min(hp["batch_size"], max(1, overrides.t3_max_embed_samples // needed))
     return hp
+
+
+def effective_t3_embed_max_samples(spec: RunSpec, config: dict, args: argparse.Namespace) -> int:
+    if not args.t3_max_embed_samples:
+        return 0
+    min_samples = max(1, args.probe_max_train_batches, args.probe_max_eval_batches)
+    if args.memory_probe:
+        hp = t3_hparams(config, spec.dataset, spec.horizon, args)
+        min_samples *= int(hp["batch_size"])
+    return max(args.t3_max_embed_samples, min_samples)
 
 
 def command_for(spec: RunSpec, config: dict, args: argparse.Namespace) -> tuple[list[str], Path, Path, dict[str, str]]:
@@ -401,9 +457,11 @@ def command_for(spec: RunSpec, config: dict, args: argparse.Namespace) -> tuple[
     if spec.model == "T3Time":
         hp = t3_hparams(config, spec.dataset, spec.horizon, args)
         cwd = REPO_ROOT / "baselines" / "T3Time"
+        embed_root = t3_embedding_root(args)
         extra_env = {
             "T3TIME_DATA_ROOT": str_path(REPO_ROOT / "data" / "t3time_dataset"),
-            "T3TIME_EMBED_ROOT": str_path(REPO_ROOT / "data" / "t3time_embeddings"),
+            "T3TIME_EMBED_ROOT": str_path(embed_root),
+            "T3TIME_PROMPT_BATCH_SIZE": str(args.t3_prompt_batch_size),
             "PYTHONPATH": str(cwd) + os.pathsep + os.environ.get("PYTHONPATH", ""),
         }
         if args.t3_gpt2_model_path:
@@ -465,10 +523,11 @@ def t3_embedding_commands(
     ds = config["datasets"][spec.dataset]
     mcfg = config["models"]["T3Time"]
     cwd = REPO_ROOT / "baselines" / "T3Time"
-    embed_root = REPO_ROOT / "data" / "t3time_embeddings"
+    embed_root = t3_embedding_root(args)
     extra_env = {
         "T3TIME_DATA_ROOT": str_path(REPO_ROOT / "data" / "t3time_dataset"),
         "T3TIME_EMBED_ROOT": str_path(embed_root),
+        "T3TIME_PROMPT_BATCH_SIZE": str(args.t3_prompt_batch_size),
         "PYTHONPATH": str(cwd) + os.pathsep + os.environ.get("PYTHONPATH", ""),
     }
     if args.t3_gpt2_model_path:
@@ -476,9 +535,16 @@ def t3_embedding_commands(
     if args.t3_gpt2_local_only:
         extra_env["T3TIME_GPT2_LOCAL_ONLY"] = "1"
     out: list[tuple[list[str], Path, Path, dict[str, str]]] = []
+    max_samples = effective_t3_embed_max_samples(spec, config, args)
     for divide in ["train", "val", "test"]:
-        marker = embed_root / ds["t3"] / f"seq{config['seq_len']}_pred{spec.horizon}" / divide / "0.h5"
-        if marker.exists() and not args.force_t3_embeddings:
+        split_dir = t3_embedding_split_dir(
+            embed_root,
+            ds["t3"],
+            int(config["seq_len"]),
+            spec.horizon,
+            divide,
+        )
+        if t3_embedding_cache_ready(split_dir, max_samples, args.force_t3_embeddings):
             continue
         log_path = (
             REPO_ROOT
@@ -505,13 +571,10 @@ def t3_embedding_commands(
             str(args.t3_embed_num_workers),
             "--batch_size",
             str(args.t3_embed_batch_size or mcfg["default_embedding_batch_size"]),
+            "--prompt_batch_size",
+            str(args.t3_prompt_batch_size),
         ]
-        if args.t3_max_embed_samples:
-            min_samples = max(1, args.probe_max_train_batches, args.probe_max_eval_batches)
-            if args.memory_probe:
-                hp = t3_hparams(config, spec.dataset, spec.horizon, args)
-                min_samples *= int(hp["batch_size"])
-            max_samples = max(args.t3_max_embed_samples, min_samples)
+        if max_samples:
             cmd += ["--max_samples", str(max_samples)]
         out.append((cmd, cwd, log_path, extra_env))
     return out
@@ -829,21 +892,37 @@ def main() -> None:
     parser.add_argument("--timellm-accelerate", default=None, help="Path to the Time-LLM env's accelerate executable.")
     parser.add_argument("--skip-t3-embeddings", action="store_true")
     parser.add_argument("--force-t3-embeddings", action="store_true")
+    parser.add_argument(
+        "--t3-embedding-only",
+        action="store_true",
+        help="Only generate T3Time prompt embeddings, useful for diagnosing the GPT-2 preprocessing stage.",
+    )
     parser.add_argument("--t3-embed-batch-size", type=int, default=0)
     parser.add_argument("--t3-embed-num-workers", type=int, default=4)
+    parser.add_argument(
+        "--t3-prompt-batch-size",
+        type=int,
+        default=32,
+        help="Number of T3Time GPT-2 prompts embedded per forward pass.",
+    )
     parser.add_argument("--t3-max-embed-samples", type=int, default=0)
     parser.add_argument("--t3-gpt2-model-path", default=None)
     parser.add_argument("--t3-gpt2-local-only", action="store_true")
     parser.add_argument("--probe-epochs", type=int, default=1)
     parser.add_argument("--probe-max-train-batches", type=int, default=2)
     parser.add_argument("--probe-max-eval-batches", type=int, default=1)
-    parser.add_argument("--probe-t3-max-embed-samples", type=int, default=32)
+    parser.add_argument("--probe-t3-max-embed-samples", type=int, default=8)
     parser.add_argument("--gpu-sample-interval-ms", type=int, default=500)
     parser.add_argument("--memory-anomaly-threshold", type=float, default=0.90)
     args = parser.parse_args()
 
     if not args.dry_run and not args.execute:
         raise SystemExit("Choose --dry-run or --execute.")
+    if args.t3_embedding_only:
+        models = split_arg(args.models, ["T3Time"])
+        if models != ["T3Time"]:
+            raise SystemExit("--t3-embedding-only is only valid with --models T3Time.")
+        args.models = "T3Time"
     if args.memory_probe and args.t3_max_embed_samples == 0:
         args.t3_max_embed_samples = args.probe_t3_max_embed_samples
 
@@ -889,6 +968,10 @@ def main() -> None:
                 print(f"[failed] T3Time embedding command exited with {code}: {emb_log}")
                 if args.fail_fast:
                     raise SystemExit(code)
+
+        if args.t3_embedding_only:
+            print("[embedding-only] Skipping training command.")
+            continue
 
         cmd, cwd, log_path, extra_env = command_for(spec, config, args)
         trace_path = (

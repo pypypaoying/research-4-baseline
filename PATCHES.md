@@ -22,7 +22,9 @@ This package vendors official repositories and applies only minimal experiment-c
 | T3Time | `storage/store_emb.py` | Add repo-root import path, configurable data/model paths, embedding batch controls, and `--max_samples` for smoke tests. |
 | T3Time | `data_provider/data_loader_save.py` | Replace hardcoded dataset root with `T3TIME_DATA_ROOT`; keep official split logic. |
 | T3Time | `data_provider/data_loader_emb.py` | Replace hardcoded embedding root with `T3TIME_EMBED_ROOT`; cache embeddings by input and prediction length. |
-| T3Time | `storage/gen_prompt_emb.py` | Allow local GPT-2 path through `T3TIME_GPT2_MODEL_PATH`; add Traffic and Exchange prompt templates. |
+| T3Time | `storage/gen_prompt_emb.py` | Allow local GPT-2 path through `T3TIME_GPT2_MODEL_PATH`; add Traffic and Exchange prompt templates; batch GPT-2 prompt inference while preserving the same last-token embedding contract. |
+| T3Time | `storage/store_emb.py` | Save one embedding file per sample even when preprocessing batch size is greater than 1; write `_meta.json` so partial probe caches are distinguishable from full caches. |
+| Runner | `scripts/run_four_baselines.py` | Add T3Time embedding-only memory probes, prompt batch-size control, metadata-based embedding cache checks, and a separate `data/t3time_embeddings_probe/` cache for limited probes. |
 
 ## Adapted Combinations
 

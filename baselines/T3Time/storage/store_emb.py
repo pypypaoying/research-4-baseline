@@ -3,6 +3,7 @@ import os
 import time
 import h5py
 import argparse
+import json
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -26,6 +27,12 @@ def parse_args():
     parser.add_argument("--divide", type=str, default="train")
     parser.add_argument("--num_workers", type=int, default=min(10, os.cpu_count()))
     parser.add_argument("--max_samples", type=int, default=0)
+    parser.add_argument(
+        "--prompt_batch_size",
+        type=int,
+        default=32,
+        help="Number of GPT-2 prompts to embed per forward pass.",
+    )
     return parser.parse_args()
 
 def get_dataset(data_path, flag, input_len, output_len):
@@ -57,7 +64,8 @@ def save_embeddings(args):
         model_name=args.model_name,
         d_model=args.d_model,
         layer=args.l_layers,
-        divide=args.divide
+        divide=args.divide,
+        prompt_batch_size=args.prompt_batch_size,
     ).to(device)
 
     save_path = os.path.join(
@@ -72,19 +80,44 @@ def save_embeddings(args):
     os.makedirs(emb_time_path, exist_ok=True)
 
     written = 0
+    dataset_size = len(data_loader.dataset)
     for i, (x, y, x_mark, y_mark) in enumerate(data_loader):
         if args.max_samples and written >= args.max_samples:
             break
+        if args.max_samples:
+            remaining = args.max_samples - written
+            if remaining < len(x):
+                x = x[:remaining]
+                x_mark = x_mark[:remaining]
         embeddings = gen_prompt_emb.generate_embeddings(x.to(device), x_mark.to(device))
 
-        file_path = os.path.join(save_path, f"{i}.h5")
-        with h5py.File(file_path, 'w') as hf:
-            hf.create_dataset('embeddings', data = embeddings.cpu().numpy())
+        if embeddings.dim() == 2:
+            embeddings = embeddings.unsqueeze(0)
+        embeddings_np = embeddings.detach().cpu().numpy()
+        for offset in range(len(x)):
+            sample_index = written + offset
+            file_path = os.path.join(save_path, f"{sample_index}.h5")
+            with h5py.File(file_path, 'w') as hf:
+                hf.create_dataset('embeddings', data=embeddings_np[offset:offset + 1])
         written += len(x)
 
         # # Save and visualize the first sample
         # if i >= 0:
         #     break
+    meta = {
+        "data_path": args.data_path,
+        "divide": args.divide,
+        "input_len": args.input_len,
+        "output_len": args.output_len,
+        "dataset_size": dataset_size,
+        "written_samples": written,
+        "complete": written >= dataset_size,
+        "max_samples": args.max_samples,
+        "prompt_batch_size": args.prompt_batch_size,
+        "embedding_batch_size": args.batch_size,
+    }
+    with open(os.path.join(save_path, "_meta.json"), "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2)
     print(f"Saved {written} embedding samples for {args.data_path}/{args.divide}")
     
 if __name__ == "__main__":
