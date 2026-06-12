@@ -190,6 +190,19 @@ python scripts/run_four_baselines.py \
   --timellm-mixed-precision no
 ```
 
+In this all-model command, DMMV uses the configured Traffic `batch_size=8`; Time-LLM uses the configured default `batch_size=24` unless `--batch-size` is supplied.
+
+For the two remaining high-memory cases, run them separately so the Time-LLM batch-size override does not accidentally overwrite DMMV's configured Traffic batch size:
+
+```bash
+GPU=0 bash scripts/run_dmmv_timellm_traffic_probe.sh
+```
+
+This fixed probe uses:
+
+- DMMV: Traffic, horizon 96, seed 2024, `seq_len=336`, `batch_size=8`.
+- Time-LLM: Traffic, horizon 96, seed 2024, `seq_len=336`, `batch_size=32`, GPT-2 with 6 layers, one process, FP32/no mixed precision.
+
 Do not use `--fail-fast` for the first memory sweep. If one model OOMs, that is a valid probe result and the runner should continue to the remaining models.
 
 If a model OOMs under the official-like batch size, keep that row as the primary memory finding. Then run a second, clearly marked rescue probe with a smaller batch size to check whether the issue is batch-size driven:
