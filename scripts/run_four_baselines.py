@@ -326,6 +326,13 @@ def command_for(spec: RunSpec, config: dict, args: argparse.Namespace) -> tuple[
         cwd = REPO_ROOT / "baselines" / "dmmv"
         ckpt = REPO_ROOT / mcfg["trained_MAE_ckpt"]
         data_name = ds["data"] if ds["data"] in {"ETTh1", "ETTh2", "ETTm1", "ETTm2"} else "custom"
+        extra_env = {}
+        if args.memory_probe:
+            extra_env = {
+                "DMMV_MAX_TRAIN_BATCHES": str(args.probe_max_train_batches),
+                "DMMV_MAX_EVAL_BATCHES": str(args.probe_max_eval_batches),
+                "DMMV_MAX_TEST_BATCHES": str(args.probe_max_eval_batches),
+            }
         cmd = [
             python_for("DMMV", args),
             "-u",
@@ -379,7 +386,7 @@ def command_for(spec: RunSpec, config: dict, args: argparse.Namespace) -> tuple[
             "--trained_MAE_ckpt",
             str_path(ckpt),
         ]
-        return cmd, cwd, log_path, {}
+        return cmd, cwd, log_path, extra_env
 
     if spec.model == "TimeLLM":
         hp = timellm_hparams(config, spec.dataset, args)
@@ -759,6 +766,13 @@ def run_command(
 ) -> tuple[int, str, float]:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     printable = f"[cwd] {cwd}\n[cmd] {command_str(cmd)}\n"
+    probe_env = {
+        key: env[key]
+        for key in sorted(env)
+        if key.startswith("DMMV_MAX_") or key.startswith("T3TIME_")
+    }
+    if probe_env:
+        printable += f"[env] {probe_env}\n"
     if dry_run:
         print(printable)
         return 0, printable, 0.0

@@ -5,12 +5,15 @@ GPU="${GPU:-0}"
 SEED="${SEED:-2024}"
 HORIZON="${HORIZON:-96}"
 THRESHOLD="${MEMORY_ANOMALY_THRESHOLD:-0.90}"
+DMMV_BATCH_SIZE="${DMMV_BATCH_SIZE:-8}"
+DMMV_PROBE_MAX_TRAIN_BATCHES="${DMMV_PROBE_MAX_TRAIN_BATCHES:-1}"
+DMMV_PROBE_MAX_EVAL_BATCHES="${DMMV_PROBE_MAX_EVAL_BATCHES:-1}"
 
 PYTHON_BIN="${PYTHON_BIN:-python}"
 
 cd "$(dirname "$0")/.."
 
-echo "[probe] DMMV Traffic h=${HORIZON} seed=${SEED} gpu=${GPU} batch_size=8"
+echo "[probe] DMMV Traffic h=${HORIZON} seed=${SEED} gpu=${GPU} batch_size=${DMMV_BATCH_SIZE}"
 "${PYTHON_BIN}" scripts/run_four_baselines.py \
   --execute \
   --memory-probe \
@@ -19,6 +22,9 @@ echo "[probe] DMMV Traffic h=${HORIZON} seed=${SEED} gpu=${GPU} batch_size=8"
   --horizons "${HORIZON}" \
   --seeds "${SEED}" \
   --gpu "${GPU}" \
+  --batch-size "${DMMV_BATCH_SIZE}" \
+  --probe-max-train-batches "${DMMV_PROBE_MAX_TRAIN_BATCHES}" \
+  --probe-max-eval-batches "${DMMV_PROBE_MAX_EVAL_BATCHES}" \
   --memory-anomaly-threshold "${THRESHOLD}"
 
 echo "[probe] TimeLLM Traffic h=${HORIZON} seed=${SEED} gpu=${GPU} batch_size=32 GPT2 layers=6 fp32"

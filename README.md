@@ -203,6 +203,14 @@ This fixed probe uses:
 - DMMV: Traffic, horizon 96, seed 2024, `seq_len=336`, `batch_size=8`.
 - Time-LLM: Traffic, horizon 96, seed 2024, `seq_len=336`, `batch_size=32`, GPT-2 with 6 layers, one process, FP32/no mixed precision.
 
+For DMMV memory probes, the runner caps the DMMV train/eval/test loops with `DMMV_MAX_TRAIN_BATCHES` and `DMMV_MAX_EVAL_BATCHES`; this avoids accidentally running a full Traffic epoch just to test memory. Full non-probe runs do not set these limits.
+
+To try a lower DMMV rescue batch size:
+
+```bash
+DMMV_BATCH_SIZE=2 GPU=0 bash scripts/run_dmmv_timellm_traffic_probe.sh
+```
+
 Do not use `--fail-fast` for the first memory sweep. If one model OOMs, that is a valid probe result and the runner should continue to the remaining models.
 
 If a model OOMs under the official-like batch size, keep that row as the primary memory finding. Then run a second, clearly marked rescue probe with a smaller batch size to check whether the issue is batch-size driven:

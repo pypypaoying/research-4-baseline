@@ -65,6 +65,15 @@ class Exp:
         data_set, data_loader = data_provider(self.args, flag)
         return data_set, data_loader
 
+    @staticmethod
+    def _env_positive_int(name: str) -> int:
+        value = os.environ.get(name, "0")
+        try:
+            parsed = int(value)
+        except ValueError:
+            return 0
+        return max(0, parsed)
+
     def _select_optimizer(self) -> optim.Optimizer:
         if self.args.optimizer == "Adam":
             model_optim = optim.Adam(
@@ -170,6 +179,14 @@ class Exp:
                 if scheduler is not None:
                     scheduler.step()
 
+                max_train_batches = self._env_positive_int("DMMV_MAX_TRAIN_BATCHES")
+                if max_train_batches and i + 1 >= max_train_batches:
+                    print(
+                        f"[probe] DMMV_MAX_TRAIN_BATCHES={max_train_batches}; "
+                        "ending train loop early"
+                    )
+                    break
+
             epoch_time_cost = time.time() - epoch_time
 
             train_loss = np.average(train_loss)
@@ -236,6 +253,14 @@ class Exp:
                 loss = criterion(pred, true)
 
                 total_loss.append(loss)
+
+                max_eval_batches = self._env_positive_int("DMMV_MAX_EVAL_BATCHES")
+                if max_eval_batches and i + 1 >= max_eval_batches:
+                    print(
+                        f"[probe] DMMV_MAX_EVAL_BATCHES={max_eval_batches}; "
+                        "ending eval loop early"
+                    )
+                    break
         total_loss = np.average(total_loss)
         self.model.train()
         return total_loss
@@ -298,6 +323,14 @@ class Exp:
                     gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
                     pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
                     visual(gt, pd, os.path.join(folder_path, str(i) + ".pdf"))
+
+                max_test_batches = self._env_positive_int("DMMV_MAX_TEST_BATCHES")
+                if max_test_batches and i + 1 >= max_test_batches:
+                    print(
+                        f"[probe] DMMV_MAX_TEST_BATCHES={max_test_batches}; "
+                        "ending test loop early"
+                    )
+                    break
 
         if self.args.test_flop:
             test_params_flop((batch_x.shape[1], batch_x.shape[2]))
