@@ -392,6 +392,17 @@ def command_for(spec: RunSpec, config: dict, args: argparse.Namespace) -> tuple[
         hp = timellm_hparams(config, spec.dataset, args)
         cwd = REPO_ROOT / "baselines" / "Time-LLM"
         master_port = str(args.master_port or (29000 + (spec.seed % 1000)))
+        extra_env = {}
+        if int(hp["processes"]) == 1:
+            extra_env.update(
+                {
+                    "RANK": "0",
+                    "WORLD_SIZE": "1",
+                    "LOCAL_RANK": "0",
+                    "MASTER_ADDR": "127.0.0.1",
+                    "MASTER_PORT": master_port,
+                }
+            )
         cmd = [
             args.timellm_accelerate or os.environ.get("TIMELLM_ACCELERATE", "accelerate"),
             "launch",
@@ -459,7 +470,7 @@ def command_for(spec: RunSpec, config: dict, args: argparse.Namespace) -> tuple[
             "--model_comment",
             f"Exp1-{spec.dataset}",
         ]
-        return cmd, cwd, log_path, {}
+        return cmd, cwd, log_path, extra_env
 
     if spec.model == "T3Time":
         hp = t3_hparams(config, spec.dataset, spec.horizon, args)
@@ -769,7 +780,9 @@ def run_command(
     probe_env = {
         key: env[key]
         for key in sorted(env)
-        if key.startswith("DMMV_MAX_") or key.startswith("T3TIME_")
+        if key.startswith("DMMV_MAX_")
+        or key.startswith("T3TIME_")
+        or key in {"RANK", "WORLD_SIZE", "LOCAL_RANK", "MASTER_ADDR", "MASTER_PORT"}
     }
     if probe_env:
         printable += f"[env] {probe_env}\n"
