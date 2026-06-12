@@ -133,6 +133,14 @@ python scripts/run_four_baselines.py \
 
 After that, running `--horizons 192,336,720` or more seeds should only do a fast cache check for embeddings unless files are missing.
 
+To measure the slow official-style T3Time Traffic path under the unified protocol, run one GPT-2 prompt at a time and one embedding sample at a time:
+
+```bash
+FRESH_CACHE=1 GPU=0 bash scripts/run_t3time_traffic_official_style.sh
+```
+
+This runs Traffic, `seq_len=336`, horizons `96,192,336,720`, seed `2024`, and summarizes results under `results/summary_t3time_traffic_official_style_<timestamp>/`. `FRESH_CACHE=1` moves any existing `data/t3time_embeddings/Traffic/seq336/` cache aside before starting, so the wall-clock time includes full embedding generation.
+
 ## Dry Run
 
 ```bash
