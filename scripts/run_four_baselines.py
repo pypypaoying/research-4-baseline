@@ -55,6 +55,9 @@ def t3_use_probe_embedding_cache(args: argparse.Namespace) -> bool:
 
 
 def t3_embedding_root(args: argparse.Namespace) -> Path:
+    if getattr(args, "t3_embedding_root", None):
+        root = Path(args.t3_embedding_root)
+        return root if root.is_absolute() else REPO_ROOT / root
     if t3_use_probe_embedding_cache(args):
         return REPO_ROOT / "data" / "t3time_embeddings_probe"
     return REPO_ROOT / "data" / "t3time_embeddings"
@@ -554,14 +557,18 @@ def t3_embedding_commands(
         extra_env["T3TIME_GPT2_LOCAL_ONLY"] = "1"
     out: list[tuple[list[str], Path, Path, dict[str, str]]] = []
     max_samples = effective_t3_embed_max_samples(spec, config, args)
-    for divide in ["train", "val", "test"]:
+    splits = split_arg(getattr(args, "t3_embedding_splits", None), ["train", "val", "test"])
+    for divide in splits:
         split_dir = t3_embedding_split_dir(
             embed_root,
             ds["t3"],
             int(config["seq_len"]),
             divide,
         )
-        if t3_embedding_cache_ready(split_dir, max_samples, args.force_t3_embeddings):
+        if (
+            t3_embedding_cache_ready(split_dir, max_samples, args.force_t3_embeddings)
+            and not args.t3_run_cache_checks
+        ):
             continue
         log_path = (
             REPO_ROOT
@@ -934,6 +941,21 @@ def main() -> None:
         help="Number of T3Time GPT-2 prompts embedded per forward pass.",
     )
     parser.add_argument("--t3-max-embed-samples", type=int, default=0)
+    parser.add_argument(
+        "--t3-embedding-root",
+        default=None,
+        help="Override T3Time embedding cache root. Relative paths are resolved from the repo root.",
+    )
+    parser.add_argument(
+        "--t3-embedding-splits",
+        default="train,val,test",
+        help="Comma-separated T3Time embedding splits to generate, e.g. train or train,val,test.",
+    )
+    parser.add_argument(
+        "--t3-run-cache-checks",
+        action="store_true",
+        help="Run store_emb.py even when metadata says the T3Time cache is ready, so cache-hit latency is logged.",
+    )
     parser.add_argument("--t3-gpt2-model-path", default=None)
     parser.add_argument("--t3-gpt2-local-only", action="store_true")
     parser.add_argument("--probe-epochs", type=int, default=1)
@@ -953,6 +975,9 @@ def main() -> None:
         args.models = "T3Time"
     if args.memory_probe and args.t3_max_embed_samples == 0:
         args.t3_max_embed_samples = args.probe_t3_max_embed_samples
+    bad_splits = sorted(set(split_arg(args.t3_embedding_splits, [])) - {"train", "val", "test"})
+    if bad_splits:
+        raise SystemExit(f"Invalid --t3-embedding-splits values: {','.join(bad_splits)}")
 
     mkdirs()
     config = load_config(REPO_ROOT / args.config)

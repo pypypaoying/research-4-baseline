@@ -95,7 +95,7 @@ T3Time uses GPT-2 for prompt embeddings. To force an offline/local cache:
 --t3-gpt2-model-path /path/to/gpt2 --t3-gpt2-local-only
 ```
 
-For Traffic, T3Time's prompt embedding stage is the main bottleneck: every time-series window has 862 variables, and the official preprocessing embeds one prompt per variable. This package keeps the same prompts, GPT-2 model, FP32 inference, and last-token embedding contract, but removes avoidable engineering overhead in two ways:
+For Traffic, T3Time's prompt embedding stage is the main bottleneck: every time-series window has 862 variables. The official repository provides offline `Store_{data_name}.sh` scripts and `storage/store_emb.py` / `storage/gen_prompt_emb.py` logic that store GPT-2 last-token embeddings before training; in the original code path, prompt embeddings are produced per variable, so this cost is amplified on high-dimensional datasets such as Traffic. This package keeps the same prompts, GPT-2 model, FP32 inference, and last-token embedding contract, but removes avoidable engineering overhead in two ways:
 
 - `--t3-prompt-batch-size` batches prompt inference without changing the generated prompts.
 - T3Time embeddings are cached by input length, for example `data/t3time_embeddings/Traffic/seq336/train/`, because the prompt embedding depends on the input window and timestamp, not on `pred_len`. The same cache is reused across horizons and seeds; if a shorter horizon needs more tail windows, `store_emb.py` only fills the missing files.
@@ -116,6 +116,23 @@ python scripts/run_four_baselines.py \
 ```
 
 This writes limited probe embeddings under `data/t3time_embeddings_probe/` and memory traces under `results/gpu_traces/`. It does not populate the full-run cache, so a later A800 full run will still generate the complete embeddings under `data/t3time_embeddings/`.
+
+To focus on the original slow-preprocessing issue rather than memory, run the dedicated speed benchmark:
+
+```bash
+MAX_SAMPLES=8 SPLITS=train GPU=0 bash scripts/benchmark_t3time_embedding_speed.sh
+```
+
+The benchmark does not train T3Time. It compares official-style preprocessing (`prompt_batch_size=1`, `embedding_batch_size=1`) with prompt batching, sample batching, and a cache-hit pass. The summary is written to `results/t3time_embedding_benchmark_<timestamp>/summary.csv`. On A800, increase `MAX_SAMPLES`, for example `MAX_SAMPLES=64`, after the 8-sample trend is clear.
+
+Useful knobs:
+
+```bash
+MAX_SAMPLES=16 SPLITS=train,val,test PROMPT_BATCHES="8 32 64" SAMPLE_BATCHES="1 2 4" \
+GPU=0 bash scripts/benchmark_t3time_embedding_speed.sh
+```
+
+These knobs preserve the baseline meaning when they keep the same GPT-2 model, FP32 inference, prompt text, and last-token embedding contract. They only change how many prompts or samples are processed per forward pass and whether already-generated embeddings are reused.
 
 For full T3Time runs, generate the shortest-horizon cache first to cover the largest number of input windows, then later horizons and seeds will reuse it:
 
