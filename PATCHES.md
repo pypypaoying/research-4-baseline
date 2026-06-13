@@ -26,6 +26,7 @@ This package vendors official repositories and applies only minimal experiment-c
 | T3Time | `storage/store_emb.py` | Save one embedding file per sample even when preprocessing batch size is greater than 1; write `_meta.json` so partial probe caches are distinguishable from full caches. |
 | Runner | `scripts/run_four_baselines.py` | Add T3Time embedding-only probes, prompt batch-size control, configurable embedding cache roots/splits, metadata-based embedding cache checks, optional cache-hit timing, and a separate `data/t3time_embeddings_probe/` cache for limited probes. |
 | Runner | `scripts/benchmark_t3time_embedding_speed.sh`, `scripts/summarize_t3time_embedding_benchmark.py` | Benchmark the T3Time GPT-2 embedding pre-generation bottleneck directly, comparing official-style one-prompt inference, prompt batching, sample batching, and cache reuse without training the model. |
+| Runner | `scripts/sweep_t3time_embed_batch.sh` | Sweep T3Time embedding batch size with fresh caches and optional GPU traces to find the largest useful preprocessing batch before OOM or throughput regression. |
 
 ## Adapted Combinations
 

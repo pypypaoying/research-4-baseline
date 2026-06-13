@@ -134,6 +134,15 @@ GPU=0 bash scripts/benchmark_t3time_embedding_speed.sh
 
 These knobs preserve the baseline meaning when they keep the same GPT-2 model, FP32 inference, prompt text, and last-token embedding contract. They only change how many prompts or samples are processed per forward pass and whether already-generated embeddings are reused.
 
+To isolate the maximum useful T3Time embedding batch size without mixing in cache-hit reuse, run:
+
+```bash
+MAX_SAMPLES=16 SPLITS=train PROMPT_BATCH_SIZE=32 EMBED_BATCHES="1 2 4 8 16 32" \
+GPU=0 bash scripts/sweep_t3time_embed_batch.sh
+```
+
+This uses a fresh cache root for every embedding batch size and records optional GPU traces. On 24 GB GPUs, start with `MAX_SAMPLES=16`; if `embed_batch=16/32` does not OOM and still improves throughput, rerun with `MAX_SAMPLES=64` for a more reliable estimate. The best batch is the largest point before either OOM, peak memory becomes too close to device capacity, or throughput plateaus/regresses.
+
 For full T3Time runs, generate the shortest-horizon cache first to cover the largest number of input windows, then later horizons and seeds will reuse it:
 
 ```bash

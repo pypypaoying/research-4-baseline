@@ -17,6 +17,38 @@ def parse_int_flag(text: str, flag: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def parse_mem_mb(value: str) -> int | None:
+    match = re.search(r"([0-9]+)", value)
+    return int(match.group(1)) if match else None
+
+
+def summarize_gpu_trace(path: Path) -> tuple[int | None, int | None, float | None, int | None]:
+    if not path.exists():
+        return None, None, None, None
+    peak = None
+    total_at_peak = None
+    max_util = None
+    with path.open("r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            if line.lower().startswith("timestamp") or not line.strip():
+                continue
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) < 5:
+                continue
+            used = parse_mem_mb(parts[2])
+            total = parse_mem_mb(parts[3])
+            util = parse_mem_mb(parts[4])
+            if used is not None and total is not None and (peak is None or used > peak):
+                peak = used
+                total_at_peak = total
+            if util is not None and (max_util is None or util > max_util):
+                max_util = util
+    ratio = None
+    if peak is not None and total_at_peak:
+        ratio = peak / total_at_peak
+    return peak, total_at_peak, ratio, max_util
+
+
 def parse_log(path: Path, n_vars: int) -> dict:
     text = path.read_text(encoding="utf-8", errors="replace")
     generated = 0
@@ -45,6 +77,8 @@ def parse_log(path: Path, n_vars: int) -> dict:
         ready = int(cache_match.group(1))
         required = int(cache_match.group(2))
         status = "cache_hit"
+    if status == "unknown" and re.search(r"Traceback|\\[failed\\]|Error|Exception", text):
+        status = "failed"
 
     time_match = re.search(r"Total time spent:\s*([0-9.]+)\s*minutes", text)
     minutes = float(time_match.group(1)) if time_match else None
@@ -65,6 +99,9 @@ def parse_log(path: Path, n_vars: int) -> dict:
     if seconds and seconds > 0:
         samples_per_min = f"{generated / seconds * 60.0:.4f}"
         prompts_per_sec = f"{generated_prompts / seconds:.4f}"
+    oom = int(bool(re.search(r"out of memory|cuda.*oom|cudnn_status_alloc_failed", text, re.IGNORECASE)))
+    trace_path = path.parent.parent / "gpu_traces" / f"{case}.csv"
+    peak_mem_mb, total_mem_mb, peak_mem_ratio, max_gpu_util = summarize_gpu_trace(trace_path)
 
     return {
         "case": case,
@@ -81,6 +118,11 @@ def parse_log(path: Path, n_vars: int) -> dict:
         "embedding_batch_size": "" if embed_batch is None else embed_batch,
         "prompt_batch_size": "" if prompt_batch is None else prompt_batch,
         "max_samples": "" if max_samples is None else max_samples,
+        "oom": oom,
+        "peak_mem_mb": "" if peak_mem_mb is None else peak_mem_mb,
+        "total_mem_mb": "" if total_mem_mb is None else total_mem_mb,
+        "peak_mem_ratio": "" if peak_mem_ratio is None else f"{peak_mem_ratio:.4f}",
+        "max_gpu_util": "" if max_gpu_util is None else max_gpu_util,
         "log_path": str(path.relative_to(REPO_ROOT)),
     }
 
@@ -123,6 +165,11 @@ def main() -> None:
         "embedding_batch_size",
         "prompt_batch_size",
         "max_samples",
+        "oom",
+        "peak_mem_mb",
+        "total_mem_mb",
+        "peak_mem_ratio",
+        "max_gpu_util",
         "log_path",
     ]
     with output.open("w", encoding="utf-8", newline="") as f:
