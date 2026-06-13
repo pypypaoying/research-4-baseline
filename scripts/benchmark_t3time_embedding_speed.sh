@@ -25,8 +25,25 @@ LOG_DIR="${RESULT_DIR}/logs"
 CACHE_BASE="data/t3time_embedding_benchmark_${RUN_TAG}"
 mkdir -p "$LOG_DIR" "$CACHE_BASE" logs results
 
+echo "[python] $("$PYTHON_BIN" -c 'import sys; print(sys.executable)')"
+"$PYTHON_BIN" - <<'PY'
+import sys
+
+required = ["numpy", "h5py", "torch", "transformers"]
+for name in required:
+    try:
+        module = __import__(name)
+        version = getattr(module, "__version__", "unknown")
+        location = getattr(module, "__file__", "built-in")
+        print(f"[env-check] {name}=={version} from {location}")
+    except Exception as exc:
+        print(f"[env-error] failed to import {name}: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+PY
+
 COMMON_ARGS=(
   --execute
+  --fail-fast
   --t3-embedding-only
   --models T3Time
   --datasets "$DATASET"
